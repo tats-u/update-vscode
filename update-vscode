@@ -1,0 +1,73 @@
+#!/usr/bin/python3
+
+# Copyright 2016-2017 (C) Tats.U.
+# This script is licensed under The MIT License.  See:
+# https://opensource.org/licenses/MIT
+
+# pylint: disable=C0103
+"""Update script for Visual Studio Code
+"""
+
+import os
+import sys
+import argparse
+import urllib
+import urllib.request
+import shutil
+import tempfile
+import subprocess
+import enum
+
+# instance_arg_parser = argparse.ArgumentParser()
+
+PackageType = enum.Enum("PackageType", "deb rpm")
+
+if os.path.isfile("/etc/lsb-release") or os.path.isfile("/etc/debian_version"):
+    package_url = "https://go.microsoft.com/fwlink/?LinkID=760868"
+    package_type = PackageType.deb
+elif os.path.isfile("/etc/fedora-release") or os.path.isfile("/etc/redhat-release") or os.path.isfile("/etc/SuSE-release"):
+    package_url = "https://go.microsoft.com/fwlink/?LinkID=760867"
+    package_type = PackageType.rpm
+else:
+    print("This system seems not to be Ubuntu, Debian, Fedora, RRHEL, CentOS, or SuSE.", file=sys.stderr)
+    exit(1)
+
+working_directory = tempfile.TemporaryDirectory()
+os.chdir(working_directory.name)
+if shutil.which("aria2c") is not None:
+    subprocess.run(["aria2c", package_url], check=True)
+    package_name = os.listdir()[0]
+else:
+    with urllib.request.urlopen(package_url) as instance_request:
+        package_name = instance_request.url.rsplit("/", 1)[-1].split("?", 1)[0]
+        with open(os.path.join(working_directory.name, package_name), "wb") as instance_package:
+            instance_package.write(instance_request.read())
+
+if os.getuid() == 0:
+    install_command = []
+else:
+    install_command = ["sudo"]
+
+if package_type == PackageType.deb:
+    gdebi_path = shutil.which("gdebi")
+    if gdebi_path is None:
+        install_command += ["dpkg", "-i"]
+    else:
+        install_command += ["gdebi", "-n"]
+elif package_type == PackageType.rpm:
+    dnf_path = shutil.which("dnf")
+    if dnf_path is not None:
+        install_command += ["dnf", "-y", "install"]
+    else:
+        yum_path = shutil.which("yum")
+        if yum_path is not None:
+            install_command += ["yum", "-y", "localinstall"]
+        else:
+            zypper_path = shutil.which("zypper")
+            if zypper_path is not None:
+                install_command += ["zypper", "-y", "install"]
+            else:
+                install_command += ["rpm", "-i"]
+
+install_command.append(package_name)
+subprocess.run(install_command, check=True)
