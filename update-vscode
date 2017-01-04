@@ -13,10 +13,23 @@ import sys
 import argparse
 import urllib
 import urllib.request
+import requests
 import shutil
 import tempfile
 import subprocess
 import enum
+import distutils.version
+import re
+
+
+def ConfirmDefaultYes(prompt):
+    reply = input("{0}[Y/n]: ".format(prompt))
+    return len(reply) == 0 or reply[0].lower() != "n"
+
+
+def ConfirmDefaultNo(prompt):
+    reply = input("{0}[y/N]: ".format(prompt))
+    return len(reply) != 0 and reply[0].lower() == "y"
 
 # instance_arg_parser = argparse.ArgumentParser()
 
@@ -29,8 +42,59 @@ elif os.path.isfile("/etc/fedora-release") or os.path.isfile("/etc/redhat-releas
     package_url = "https://go.microsoft.com/fwlink/?LinkID=760867"
     package_type = PackageType.rpm
 else:
-    print("This system seems not to be Ubuntu, Debian, Fedora, RRHEL, CentOS, or SuSE.", file=sys.stderr)
+    print(
+        "This system seems not to be Ubuntu, Debian, Fedora, RHEL, CentOS, or SuSE.",
+        file=sys.stderr)
     exit(1)
+
+print("Checking the latest version...", file=sys.stderr)
+remote_version_check_request_result = requests.head(
+    package_url, allow_redirects=True)
+package_name = remote_version_check_request_result.url.split("/")[-1]
+remote_package_version = package_name.split("_")[1].split("-")[0]
+
+print("Checking the local version...", file=sys.stderr)
+if package_type == PackageType.deb:
+    local_package_version_check_request_result = subprocess.run(
+        ["dpkg", "-l", "code"], stdout=subprocess.PIPE)
+    if local_package_version_check_request_result.returncode == 0:
+        line_filter_regexp = re.compile("^ii +")
+        local_package_version_line = [l for l in
+                                      local_package_version_check_request_result.stdout.decode(
+                                      ).split("\n") if line_filter_regexp.match(l)][0]
+        local_package_version = re.split(
+            " +", local_package_version_line)[2].split("-")[0]
+    else:
+        local_package_version = None
+else:
+    local_package_version_check_request_result = subprocess.run(
+        ["rpm", "-q", "code"], stdout=subprocess.PIPE)
+    if local_package_version_check_request_result.returncode == 0:
+        local_package_version = local_package_version_check_request_result.stdout.decode(
+        ).rstrip("\n").split("-")[1]
+    else:
+        local_package_version = None
+
+if local_package_version is not None:
+    remote_package_version_comparator = distutils.version.LooseVersion(
+        remote_package_version)
+    local_package_version_comparator = distutils.version.LooseVersion(
+        local_package_version)
+    if remote_package_version_comparator == local_package_version_comparator:
+        if not ConfirmDefaultNo(
+                "It seems the latest version {version} has already been installed in this system.  "
+                "Do you want to download and install it again?".format(
+                    version=remote_package_version)):
+            print("Existing.")
+            exit(0)
+    elif remote_package_version_comparator < local_package_version_comparator:
+        print(
+            "Something is wrong.  The local version is {local} "
+            "but the remote version is {remote}.  Existing.".format(
+                local=local_package_version,
+                remote=remote_package_version),
+            file=sys.stderr)
+        exit(1)
 
 working_directory = tempfile.TemporaryDirectory()
 os.chdir(working_directory.name)
