@@ -51,7 +51,10 @@ print("Checking the latest version...", file=sys.stderr)
 remote_version_check_request_result = requests.head(
     package_url, allow_redirects=True)
 package_name = remote_version_check_request_result.url.split("/")[-1]
-remote_package_version = package_name.split("_")[1].split("-")[0]
+if package_type == PackageType.deb:
+    remote_package_version = package_name.split("_")[1].split("-")[0]
+else:
+    remote_package_version = package_name.split("-")[1]
 
 print("Checking the local version...", file=sys.stderr)
 if package_type == PackageType.deb:
