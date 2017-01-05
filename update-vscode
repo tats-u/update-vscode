@@ -22,12 +22,12 @@ import distutils.version
 import re
 
 
-def ConfirmDefaultYes(prompt):
+def confirm_default_yes(prompt):
     reply = input("{0}[Y/n]: ".format(prompt))
     return len(reply) == 0 or reply[0].lower() != "n"
 
 
-def ConfirmDefaultNo(prompt):
+def confirm_default_no(prompt):
     reply = input("{0}[y/N]: ".format(prompt))
     return len(reply) != 0 and reply[0].lower() == "y"
 
@@ -81,7 +81,7 @@ if local_package_version is not None:
     local_package_version_comparator = distutils.version.LooseVersion(
         local_package_version)
     if remote_package_version_comparator == local_package_version_comparator:
-        if not ConfirmDefaultNo(
+        if not confirm_default_no(
                 "It seems the latest version {version} has already been installed in this system.  "
                 "Do you want to download and install it again?".format(
                     version=remote_package_version)):
